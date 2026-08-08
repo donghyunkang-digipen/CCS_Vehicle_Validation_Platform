@@ -1,0 +1,2 @@
+# Runtime dependencies for users who prefer pip requirements files.
+python-can>=4.4,<5

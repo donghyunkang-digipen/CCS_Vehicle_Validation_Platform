@@ -1,0 +1,1 @@
+"""Virtual CAN simulation components."""
