@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ "${EUID}" -ne 0 ]]; then
-  echo "Run this script with sudo: sudo ./scripts/setup_vcan.sh" >&2
+  echo "Run this script with sudo: sudo bash scripts/setup_vcan.sh" >&2
   exit 1
 fi
 

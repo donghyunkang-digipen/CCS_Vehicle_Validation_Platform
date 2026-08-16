@@ -8,6 +8,7 @@ import math
 import time
 from collections.abc import Callable
 from collections.abc import Sequence
+from typing import Protocol
 
 import can
 
@@ -22,6 +23,13 @@ from .protocol import (
 )
 
 LOGGER = logging.getLogger(__name__)
+
+
+class CanMessageSender(Protocol):
+    """Minimal bus interface required by the transmitter."""
+
+    def send(self, message: can.Message) -> None:
+        """Send one CAN message."""
 
 
 def build_messages(state: EngineState) -> tuple[can.Message, can.Message]:
@@ -40,7 +48,7 @@ def build_messages(state: EngineState) -> tuple[can.Message, can.Message]:
     )
 
 
-def transmit_cycle(bus: can.BusABC, state: EngineState) -> None:
+def transmit_cycle(bus: CanMessageSender, state: EngineState) -> None:
     """Transmit one status frame and one speed frame."""
     for message in build_messages(state):
         bus.send(message)
@@ -48,14 +56,14 @@ def transmit_cycle(bus: can.BusABC, state: EngineState) -> None:
 
 
 def run(
-    bus: can.BusABC,
+    bus: CanMessageSender,
     state: EngineState,
     period_seconds: float,
     sleep: Callable[[float], None] = time.sleep,
 ) -> None:
     """Transmit frames continuously until interrupted."""
-    if period_seconds <= 0:
-        raise ValueError("period must be greater than zero")
+    if not math.isfinite(period_seconds) or period_seconds <= 0:
+        raise ValueError("period must be a finite number greater than zero")
     while True:
         transmit_cycle(bus, state)
         sleep(period_seconds)

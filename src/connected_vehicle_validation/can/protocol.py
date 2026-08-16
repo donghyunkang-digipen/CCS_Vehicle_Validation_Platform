@@ -1,4 +1,4 @@
-"""DBC-backed synthetic CAN protocol used by milestone v0.2."""
+"""DBC-backed synthetic CAN protocol used by milestone v0.2.0."""
 
 from __future__ import annotations
 

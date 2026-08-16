@@ -29,14 +29,15 @@ def test_build_messages_uses_standard_fictional_ids() -> None:
 
 def test_transmit_cycle_sends_both_messages() -> None:
     bus = RecordingBus()
-    transmit_cycle(bus, EngineState(True, False, 0.0))  # type: ignore[arg-type]
+    transmit_cycle(bus, EngineState(True, False, 0.0))
     assert [message.arbitration_id for message in bus.messages] == [0x180, 0x181]
 
 
-def test_run_rejects_nonpositive_period_before_transmitting() -> None:
+@pytest.mark.parametrize("period", [0.0, -1.0, float("nan"), float("inf")])
+def test_run_rejects_invalid_period_before_transmitting(period: float) -> None:
     bus = RecordingBus()
-    with pytest.raises(ValueError, match="greater than zero"):
-        run(bus, EngineState(True, True, 42.5), 0.0)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="finite number greater than zero"):
+        run(bus, EngineState(True, True, 42.5), period)
     assert bus.messages == []
 
 
