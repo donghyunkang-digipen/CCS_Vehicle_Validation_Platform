@@ -2,20 +2,21 @@
 
 A personal portfolio project for a fully synthetic, production-inspired connected-vehicle validation environment. All vehicle behavior, CAN identifiers, payloads, and tests in this repository are fictional and do not represent any OEM or supplier system.
 
-## Implemented milestone: v0.1 Virtual CAN Communication
+## Implemented milestone: v0.2.0 DBC-Based CAN Modeling
 
 ```text
-Engine ECU Simulator -> Linux SocketCAN vcan0 -> CCU Receiver
+Engine ECU state -> cantools + synthetic_vehicle.dbc -> SocketCAN vcan0
+SocketCAN vcan0 -> cantools + synthetic_vehicle.dbc -> CCU display
 ```
 
-The engine ECU sends two fictional standard (11-bit) CAN frames every 500 ms by default:
+The DBC is the single source of truth for the two fictional standard (11-bit) CAN frames. The engine ECU encodes signals from it every 500 ms by default, and the CCU decodes received payloads through the same model:
 
-| CAN ID | Payload | Synthetic meaning |
-| --- | --- | --- |
-| `0x180` | 1 byte; bit 0 ignition, bit 1 engine running | Engine status |
-| `0x181` | 2-byte unsigned big-endian integer, scale 0.1 km/h | Vehicle speed |
+| CAN ID | DBC message | DBC signals | Payload |
+| --- | --- | --- | --- |
+| `0x180` | `EngineStatus` | `IgnitionOn`, `EngineRunning` | 1 byte; one-bit unsigned signals |
+| `0x181` | `VehicleSpeed` | `VehicleSpeedKph` | 2-byte big-endian unsigned signal; 0.1 km/h scale; 0.0-6553.5 km/h |
 
-There is intentionally no DBC in v0.1. MQTT, HTTP, databases, containers, and user interfaces are outside this milestone.
+All names, identifiers, signals, values, and payloads are invented for this portfolio project. MQTT, HTTP, databases, Docker, frontends, and fault injection remain outside this milestone.
 
 ## Windows 11 and WSL2 workflow
 
@@ -33,7 +34,7 @@ cd /mnt/c/CCS_Vehicle_Validation_Platform
 pwd
 ```
 
-The expected output is `/mnt/c/CCS_Vehicle_Validation_Platform`. Linux filesystem operations under `/mnt/c` can be slower than under the native WSL filesystem, but that does not prevent v0.1 from running.
+The expected output is `/mnt/c/CCS_Vehicle_Validation_Platform`. Linux filesystem operations under `/mnt/c` can be slower than under the native WSL filesystem, but that does not prevent v0.2.0 from running.
 
 ## Install Ubuntu packages and project dependencies
 
@@ -156,7 +157,7 @@ Equivalent module commands are `python -m connected_vehicle_validation.can.ccu_r
 
 ## Run tests
 
-Tests use in-memory messages and a recording bus, so they do not require root privileges or `vcan0`:
+Tests cover DBC loading, message and signal metadata, encoding, decoding, scaling, boundaries, malformed inputs, CLI parsing, and in-memory CAN behavior. They do not require root privileges or `vcan0`:
 
 ```bash
 cd /mnt/c/CCS_Vehicle_Validation_Platform
@@ -184,7 +185,7 @@ python -m pytest
 ```
 
 Do not disable pytest's cache provider merely to conceal this warning. Keeping the
-repository under `/mnt/c` is supported for v0.1, but a repository stored under the
+repository under `/mnt/c` is supported for v0.2.0, but a repository stored under the
 native WSL filesystem (for example `~/projects/`) provides faster Linux file I/O
 and avoids Windows/WSL permission translation issues. Moving it is recommended for
 long-term Linux-first development, not required for this milestone.
@@ -194,11 +195,15 @@ long-term Linux-first development, not required for this milestone.
 ```text
 scripts/setup_vcan.sh                         Linux vcan0 setup
 src/connected_vehicle_validation/can/
-  protocol.py                                 Synthetic payload encoding
+  synthetic_vehicle.dbc                      Fictional CAN message and signal model
+  protocol.py                                 DBC loader and encoding/decoding API
   engine_ecu.py                               Periodic CAN transmitter
   ccu_receiver.py                             CAN receiver and display
-tests/                                        Unit tests
+tests/test_dbc.py                              Direct DBC and signal tests
+tests/                                         Protocol, ECU, and receiver tests
 ```
+
+The DBC is included as Python package data, so editable and wheel installations load the same model through `importlib.resources`. Python does not duplicate bit positions, byte order, scaling, lengths, or CAN identifiers; `cantools` reads those properties from the packaged DBC.
 
 ## Manual acceptance checklist
 
@@ -210,12 +215,15 @@ tests/                                        Unit tests
 - [ ] `candump -L vcan0` displays the raw `180` and `181` frames.
 - [ ] Receiver output shows ignition on, engine running, and speed `42.5` km/h.
 - [ ] `python -m pytest` completes with all tests passing.
+- [ ] The packaged DBC loads and defines messages `EngineStatus` (`0x180`) and `VehicleSpeed` (`0x181`).
+- [ ] Default raw payloads remain `03` for both engine flags on and `01 A9` for 42.5 km/h.
+- [ ] Boundary speeds 0.0 and 6553.5 km/h encode/decode successfully; out-of-range and malformed inputs are rejected.
 
 ## Known limitations
 
 - SocketCAN runs inside Ubuntu/WSL2, not directly on Windows.
 - Some WSL2 kernels may lack `CONFIG_CAN_VCAN`; use the checks above to detect this.
 - The simulator broadcasts a fixed state until restarted with different options.
-- The protocol is hand-coded and limited to two frames; DBC support is deferred.
+- The fictional DBC intentionally models only the two v0.1-compatible frames.
 - There is no fault injection, persistence, remote transport, or dashboard.
 - The setup script configures `vcan0` only for the current WSL virtual-machine session.

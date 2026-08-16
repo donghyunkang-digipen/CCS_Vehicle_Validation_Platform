@@ -1,15 +1,37 @@
-"""Small synthetic CAN protocol used by milestone v0.1.
-
-The identifiers and payload layouts in this module are entirely fictional.
-No DBC is used in this milestone.
-"""
+"""DBC-backed synthetic CAN protocol used by milestone v0.2."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
+from importlib import resources
+import math
 
-ENGINE_STATUS_CAN_ID = 0x180
-VEHICLE_SPEED_CAN_ID = 0x181
+import cantools
+from cantools.database import Database, Message
+from cantools.database.errors import DecodeError, EncodeError
+
+DBC_RESOURCE = "synthetic_vehicle.dbc"
+ENGINE_STATUS_MESSAGE = "EngineStatus"
+VEHICLE_SPEED_MESSAGE = "VehicleSpeed"
+
+
+@lru_cache(maxsize=1)
+def load_database() -> Database:
+    """Load and cache the packaged fictional CAN database."""
+    dbc_text = resources.files(__package__).joinpath(DBC_RESOURCE).read_text(encoding="utf-8")
+    return cantools.database.load_string(dbc_text, database_format="dbc", strict=True)
+
+
+def _message(name: str) -> Message:
+    return load_database().get_message_by_name(name)
+
+
+ENGINE_STATUS_CAN_ID = _message(ENGINE_STATUS_MESSAGE).frame_id
+VEHICLE_SPEED_CAN_ID = _message(VEHICLE_SPEED_MESSAGE).frame_id
+_VEHICLE_SPEED_SIGNAL = _message(VEHICLE_SPEED_MESSAGE).get_signal_by_name("VehicleSpeedKph")
+VEHICLE_SPEED_MIN_KPH = float(_VEHICLE_SPEED_SIGNAL.minimum)
+VEHICLE_SPEED_MAX_KPH = float(_VEHICLE_SPEED_SIGNAL.maximum)
 
 
 @dataclass(frozen=True)
@@ -22,28 +44,53 @@ class EngineState:
 
 
 def encode_engine_status(ignition_on: bool, engine_running: bool) -> bytes:
-    """Encode ignition and running flags into a one-byte payload."""
-    flags = int(ignition_on) | (int(engine_running) << 1)
-    return bytes((flags,))
+    """Encode ignition and running flags with the packaged DBC."""
+    try:
+        return _message(ENGINE_STATUS_MESSAGE).encode(
+            {"IgnitionOn": int(ignition_on), "EngineRunning": int(engine_running)},
+            strict=True,
+        )
+    except (EncodeError, TypeError, ValueError) as error:
+        raise ValueError(f"invalid engine status signals: {error}") from error
 
 
 def decode_engine_status(data: bytes | bytearray) -> tuple[bool, bool]:
-    """Decode ignition and running flags from a status payload."""
-    if len(data) != 1:
-        raise ValueError("engine status payload must contain exactly 1 byte")
-    return bool(data[0] & 0x01), bool(data[0] & 0x02)
+    """Decode ignition and running flags with the packaged DBC."""
+    message = _message(ENGINE_STATUS_MESSAGE)
+    if len(data) != message.length:
+        raise ValueError(f"engine status payload must contain exactly {message.length} byte")
+    try:
+        signals = message.decode(data, decode_choices=False)
+    except (DecodeError, TypeError, ValueError) as error:
+        raise ValueError(f"invalid engine status payload: {error}") from error
+    return bool(signals["IgnitionOn"]), bool(signals["EngineRunning"])
 
 
 def encode_vehicle_speed(speed_kph: float) -> bytes:
-    """Encode speed as an unsigned big-endian value in 0.1 km/h units."""
-    if not 0.0 <= speed_kph <= 6553.5:
-        raise ValueError("vehicle speed must be between 0.0 and 6553.5 km/h")
-    raw_speed = round(speed_kph * 10)
-    return raw_speed.to_bytes(2, byteorder="big", signed=False)
+    """Encode vehicle speed with DBC-defined scaling and byte order."""
+    if (
+        not math.isfinite(speed_kph)
+        or not VEHICLE_SPEED_MIN_KPH <= speed_kph <= VEHICLE_SPEED_MAX_KPH
+    ):
+        raise ValueError(
+            f"vehicle speed must be between {VEHICLE_SPEED_MIN_KPH:.1f} and "
+            f"{VEHICLE_SPEED_MAX_KPH:.1f} km/h"
+        )
+    try:
+        return _message(VEHICLE_SPEED_MESSAGE).encode(
+            {"VehicleSpeedKph": speed_kph}, strict=True
+        )
+    except (EncodeError, TypeError, ValueError) as error:
+        raise ValueError(f"invalid vehicle speed signal: {error}") from error
 
 
 def decode_vehicle_speed(data: bytes | bytearray) -> float:
-    """Decode a two-byte vehicle-speed payload to km/h."""
-    if len(data) != 2:
-        raise ValueError("vehicle speed payload must contain exactly 2 bytes")
-    return int.from_bytes(data, byteorder="big", signed=False) / 10.0
+    """Decode DBC-scaled vehicle speed in km/h."""
+    message = _message(VEHICLE_SPEED_MESSAGE)
+    if len(data) != message.length:
+        raise ValueError(f"vehicle speed payload must contain exactly {message.length} bytes")
+    try:
+        signals = message.decode(data, decode_choices=False)
+    except (DecodeError, TypeError, ValueError) as error:
+        raise ValueError(f"invalid vehicle speed payload: {error}") from error
+    return float(signals["VehicleSpeedKph"])

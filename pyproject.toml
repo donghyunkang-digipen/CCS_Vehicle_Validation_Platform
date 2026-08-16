@@ -4,11 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "connected-vehicle-validation"
-version = "0.1.0"
+version = "0.2.0"
 description = "Synthetic connected-vehicle validation environment"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "cantools>=40,<41",
     "python-can>=4.4,<5",
 ]
 
@@ -23,6 +24,9 @@ ccu-receiver = "connected_vehicle_validation.can.ccu_receiver:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"connected_vehicle_validation.can" = ["*.dbc"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"

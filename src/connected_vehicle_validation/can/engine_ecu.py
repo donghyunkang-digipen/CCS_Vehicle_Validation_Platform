@@ -13,6 +13,8 @@ import can
 
 from .protocol import (
     ENGINE_STATUS_CAN_ID,
+    VEHICLE_SPEED_MAX_KPH,
+    VEHICLE_SPEED_MIN_KPH,
     VEHICLE_SPEED_CAN_ID,
     EngineState,
     encode_engine_status,
@@ -68,10 +70,13 @@ def positive_float(value: str) -> float:
 
 
 def valid_speed(value: str) -> float:
-    """Parse a speed representable by the synthetic two-byte payload."""
+    """Parse a speed within the range defined by the synthetic DBC."""
     parsed = float(value)
-    if not 0.0 <= parsed <= 6553.5:
-        raise argparse.ArgumentTypeError("speed must be between 0.0 and 6553.5 km/h")
+    if not math.isfinite(parsed) or not VEHICLE_SPEED_MIN_KPH <= parsed <= VEHICLE_SPEED_MAX_KPH:
+        raise argparse.ArgumentTypeError(
+            f"speed must be between {VEHICLE_SPEED_MIN_KPH:.1f} and "
+            f"{VEHICLE_SPEED_MAX_KPH:.1f} km/h"
+        )
     return parsed
 
 

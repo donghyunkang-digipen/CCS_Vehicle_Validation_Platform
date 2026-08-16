@@ -1,2 +1,3 @@
 # Runtime dependencies for users who prefer pip requirements files.
+cantools>=40,<41
 python-can>=4.4,<5
